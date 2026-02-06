@@ -51,11 +51,11 @@ Public Sub FillForm_Tracked_ByPython()
     Dim fillResp As String
     fillResp = HttpPostJson(FILL_URL, payload)
 
-    ApplyFillPlanPlain_WithReasons doc, fillResp, APPLY_REASONS_COMMENTS
+    ApplyFillPlan doc, fillResp, APPLY_REASONS_COMMENTS
 
     ' 5) fix stage from instruction comments
     If FIX_FROM_COMMENTS Then
-        FixTextByInstructionComments_Tracked doc
+        FixTextByInstructionComments doc
     End If
 
     ' cleanup snapshot
@@ -78,8 +78,9 @@ End Sub
 Private Function BuildPayload(ByVal doc As Document, ByVal tempTextPath As String, ByVal deep As Boolean) As String
     Dim sb As String
     sb = "{"
-    sb = sb & """doc_name"":""" & JsonEscapeStrict(doc.Name) & ""","
-    sb = sb & """temp_text_path"":""" & JsonEscapeStrict(tempTextPath) & ""","
+    sb = sb & """doc_name"":""" & JsonEsc(doc.Name) & ""","
+    sb = sb & """doc_folder"":""" & JsonEsc(doc.Path) & ""","
+    sb = sb & """temp_text_path"":""" & JsonEsc(tempTextPath) & ""","
     sb = sb & """deep_context"":" & LCase$(CStr(deep)) & ","
     sb = sb & """content_controls"":" & CollectContentControlsJson(doc) & ","
     sb = sb & """placeholders"":" & CollectPlaceholdersJson(doc) & ","
@@ -103,10 +104,10 @@ Private Function CollectContentControlsJson(ByVal doc As Document) As String
 
         parts = parts & "{"
         parts = parts & """id"":" & CStr(cc.ID) & ","
-        parts = parts & """tag"":""" & JsonEscapeStrict(cc.Tag) & ""","
-        parts = parts & """title"":""" & JsonEscapeStrict(cc.Title) & ""","
-        parts = parts & """cc_type"":""" & JsonEscapeStrict(ContentControlTypeName(cc.Type)) & ""","
-        parts = parts & """context"":""" & JsonEscapeStrict(LimitLen(ctx, 400)) & """"
+        parts = parts & """tag"":""" & JsonEsc(cc.Tag) & ""","
+        parts = parts & """title"":""" & JsonEsc(cc.Title) & ""","
+        parts = parts & """cc_type"":""" & JsonEsc(ContentControlTypeName(cc.Type)) & ""","
+        parts = parts & """context"":""" & JsonEsc(Clip(ctx, 400)) & """"
         parts = parts & "}"
     Next cc
 
@@ -143,10 +144,10 @@ Private Function CollectPlaceholdersJson(ByVal doc As Document) As String
         first = False
 
         parts = parts & "{"
-        parts = parts & """token"":""" & JsonEscapeStrict(token) & ""","
-        parts = parts & """key"":""" & JsonEscapeStrict(key) & ""","
+        parts = parts & """token"":""" & JsonEsc(token) & ""","
+        parts = parts & """key"":""" & JsonEsc(key) & ""","
         parts = parts & """occurrence"":" & CStr(occ) & ","
-        parts = parts & """context"":""" & JsonEscapeStrict(LimitLen(ctx, 400)) & """"
+        parts = parts & """context"":""" & JsonEsc(Clip(ctx, 400)) & """"
         parts = parts & "}"
 
         r.Collapse wdCollapseEnd
@@ -196,11 +197,10 @@ Private Function CollectUnderscoreRunsJson(ByVal doc As Document) As String
 
                 Dim grp As Range
                 Set grp = doc.Range(Start:=groupStart, End:=groupEnd)
-
                 Dim ctx As String
                 ctx = GetContextAroundRange(grp, 80, doc)
 
-                parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEscapeStrict(LimitLen(ctx, 400)) & """}"
+                parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctx, 400)) & """}"
 
                 groupStart = scan.Start
                 groupEnd = scan.End
@@ -217,11 +217,10 @@ Private Function CollectUnderscoreRunsJson(ByVal doc As Document) As String
 
         Dim grpLast As Range
         Set grpLast = doc.Range(Start:=groupStart, End:=groupEnd)
-
         Dim ctxLast As String
         ctxLast = GetContextAroundRange(grpLast, 80, doc)
 
-        parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEscapeStrict(LimitLen(ctxLast, 400)) & """}"
+        parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctxLast, 400)) & """}"
     End If
 
     parts = parts & "]"
@@ -285,9 +284,9 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
                 ctx = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 80, doc)
 
                 parts = parts & "{""occurrence"":" & CStr(groupOcc) & _
-                                ",""text"":""" & JsonEscapeStrict(LimitLen(curParaText, 800)) & """" & _
+                                ",""text"":""" & JsonEsc(Clip(curParaText, 800)) & """" & _
                                 ",""boxes"":" & boxesJson & _
-                                ",""context"":""" & JsonEscapeStrict(LimitLen(ctx, 400)) & """}"
+                                ",""context"":""" & JsonEsc(Clip(ctx, 400)) & """}"
             End If
 
             curParaStart = pStart
@@ -319,9 +318,9 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
         ctxLast = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 80, doc)
 
         parts = parts & "{""occurrence"":" & CStr(groupOcc) & _
-                        ",""text"":""" & JsonEscapeStrict(LimitLen(curParaText, 800)) & """" & _
+                        ",""text"":""" & JsonEsc(Clip(curParaText, 800)) & """" & _
                         ",""boxes"":" & boxesJson & _
-                        ",""context"":""" & JsonEscapeStrict(LimitLen(ctxLast, 400)) & """}"
+                        ",""context"":""" & JsonEsc(Clip(ctxLast, 400)) & """}"
     End If
 
     parts = parts & "]"
@@ -329,16 +328,13 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
 End Function
 
 ' ==========================================================
-' APPLY FILL PLAN (with reasons)
-' Lines:
-'   CC|id|val|reason
-'   PH|token|val|reason
-'   US|occ|val|reason
-'   CB|group|indicesCsv|reason
+' APPLY FILL PLAN
+' Lines:  CC|id|val|reason   PH|token|val|reason
+'         US|occ|val|reason  CB|group|indicesCsv|reason
 ' ==========================================================
-Private Sub ApplyFillPlanPlain_WithReasons(ByVal doc As Document, ByVal plan As String, ByVal addReasons As Boolean)
+Private Sub ApplyFillPlan(ByVal doc As Document, ByVal plan As String, ByVal addReasons As Boolean)
     Dim lines() As String
-    lines = Split(NormalizeNewlines(plan), vbLf)
+    lines = Split(NormLF(plan), vbLf)
 
     Dim dictCC As Object: Set dictCC = CreateObject("Scripting.Dictionary")
     Dim dictCCWhy As Object: Set dictCCWhy = CreateObject("Scripting.Dictionary")
@@ -354,62 +350,61 @@ Private Sub ApplyFillPlanPlain_WithReasons(ByVal doc As Document, ByVal plan As 
 
     Dim i As Long
     For i = LBound(lines) To UBound(lines)
-        Dim line As String
-        line = Trim$(lines(i))
-        If Len(line) = 0 Then GoTo NextLine
+        Dim ln As String
+        ln = Trim$(lines(i))
+        If Len(ln) = 0 Then GoTo NextLine
 
         Dim parts() As String
-        parts = Split(line, "|")
+        parts = Split(ln, "|")
         If UBound(parts) < 2 Then GoTo NextLine
 
         Dim kind As String
         kind = parts(0)
 
         If kind = "CC" Then
-            dictCC(parts(1)) = UrlDecode(parts(2))
-            If UBound(parts) >= 3 Then dictCCWhy(parts(1)) = UrlDecode(parts(3))
+            dictCC(parts(1)) = UrlDec(parts(2))
+            If UBound(parts) >= 3 Then dictCCWhy(parts(1)) = UrlDec(parts(3))
 
         ElseIf kind = "PH" Then
             Dim tok As String
-            tok = UrlDecode(parts(1))
-            dictPH(tok) = UrlDecode(parts(2))
-            If UBound(parts) >= 3 Then dictPHWhy(tok) = UrlDecode(parts(3))
+            tok = UrlDec(parts(1))
+            dictPH(tok) = UrlDec(parts(2))
+            If UBound(parts) >= 3 Then dictPHWhy(tok) = UrlDec(parts(3))
 
         ElseIf kind = "US" Then
-            dictUS(parts(1)) = UrlDecode(parts(2))
-            If UBound(parts) >= 3 Then dictUSWhy(parts(1)) = UrlDecode(parts(3))
+            dictUS(parts(1)) = UrlDec(parts(2))
+            If UBound(parts) >= 3 Then dictUSWhy(parts(1)) = UrlDec(parts(3))
 
         ElseIf kind = "CB" Then
-            dictCB(parts(1)) = UrlDecode(parts(2))
-            If UBound(parts) >= 3 Then dictCBWhy(parts(1)) = UrlDecode(parts(3))
+            dictCB(parts(1)) = UrlDec(parts(2))
+            If UBound(parts) >= 3 Then dictCBWhy(parts(1)) = UrlDec(parts(3))
         End If
 
 NextLine:
     Next i
 
-    ' content controls
+    ' ── content controls ──
     Dim cc As ContentControl
     For Each cc In doc.ContentControls
         Dim idKey As String
         idKey = CStr(cc.ID)
 
         If dictCC.Exists(idKey) Then
-            Dim startPos As Long
-            startPos = cc.Range.Start
+            Dim ccStart As Long
+            ccStart = cc.Range.Start
 
-            Dim val As String
-            val = CStr(dictCC(idKey))
-            cc.Range.Text = val
+            Dim ccVal As String
+            ccVal = CStr(dictCC(idKey))
+            cc.Range.Text = ccVal
 
             If addReasons And dictCCWhy.Exists(idKey) Then
-                Dim rr As Range
-                Set rr = doc.Range(startPos, startPos + Len(val))
-                AddCommentSafe doc, rr, "Reason: " & LimitLen(CStr(dictCCWhy(idKey)), 220)
+                AddCommentSafe doc, doc.Range(ccStart, ccStart + Len(ccVal)), _
+                    "Reason: " & Clip(CStr(dictCCWhy(idKey)), 220)
             End If
         End If
     Next cc
 
-    ' placeholders
+    ' ── placeholders ──
     Dim phTok As Variant
     For Each phTok In dictPH.Keys
         ReplaceAll doc, CStr(phTok), CStr(dictPH(phTok))
@@ -418,24 +413,23 @@ NextLine:
             Dim rrPH As Range
             Set rrPH = FindFirst(doc.StoryRanges(wdMainTextStory), CStr(dictPH(phTok)))
             If Not rrPH Is Nothing Then
-                AddCommentSafe doc, rrPH, "Reason: " & LimitLen(CStr(dictPHWhy(CStr(phTok))), 220)
+                AddCommentSafe doc, rrPH, "Reason: " & Clip(CStr(dictPHWhy(CStr(phTok))), 220)
             End If
         End If
     Next phTok
 
-    ' underscores
-    If dictUS.Count > 0 Then ReplaceUnderscoreRunsByOccurrence doc, dictUS, dictUSWhy, addReasons
+    ' ── underscores ──
+    If dictUS.Count > 0 Then ReplaceUnderscoreRuns doc, dictUS, dictUSWhy, addReasons
 
-    ' checkboxes
+    ' ── checkboxes ──
     If dictCB.Count > 0 Then ApplyCheckboxGroups doc, dictCB, dictCBWhy, addReasons
 End Sub
 
-Private Sub ReplaceUnderscoreRunsByOccurrence(ByVal doc As Document, ByVal dictUS As Object, ByVal dictUSWhy As Object, ByVal addReasons As Boolean)
+Private Sub ReplaceUnderscoreRuns(ByVal doc As Document, ByVal dictUS As Object, ByVal dictUSWhy As Object, ByVal addReasons As Boolean)
     Dim scan As Range
     Set scan = doc.StoryRanges(wdMainTextStory)
 
     Dim occ As Long: occ = 0
-
     Dim inGroup As Boolean: inGroup = False
     Dim groupStart As Long: groupStart = -1
     Dim groupEnd As Long: groupEnd = -1
@@ -460,7 +454,7 @@ Private Sub ReplaceUnderscoreRunsByOccurrence(ByVal doc As Document, ByVal dictU
                 groupEnd = scan.End
             Else
                 occ = occ + 1
-                ApplyOneUnderscoreGroup doc, dictUS, dictUSWhy, addReasons, occ, groupStart, groupEnd
+                ApplyOneUnderscore doc, dictUS, dictUSWhy, addReasons, occ, groupStart, groupEnd
                 groupStart = scan.Start
                 groupEnd = scan.End
             End If
@@ -471,29 +465,26 @@ Private Sub ReplaceUnderscoreRunsByOccurrence(ByVal doc As Document, ByVal dictU
 
     If inGroup Then
         occ = occ + 1
-        ApplyOneUnderscoreGroup doc, dictUS, dictUSWhy, addReasons, occ, groupStart, groupEnd
+        ApplyOneUnderscore doc, dictUS, dictUSWhy, addReasons, occ, groupStart, groupEnd
     End If
 End Sub
 
-Private Sub ApplyOneUnderscoreGroup(ByVal doc As Document, ByVal dictUS As Object, ByVal dictUSWhy As Object, ByVal addReasons As Boolean, ByVal occ As Long, ByVal groupStart As Long, ByVal groupEnd As Long)
-    Dim key As String
-    key = CStr(occ)
+Private Sub ApplyOneUnderscore(ByVal doc As Document, ByVal dictUS As Object, ByVal dictUSWhy As Object, ByVal addReasons As Boolean, ByVal occ As Long, ByVal gStart As Long, ByVal gEnd As Long)
+    Dim key As String: key = CStr(occ)
     If Not dictUS.Exists(key) Then Exit Sub
 
     Dim grp As Range
-    Set grp = doc.Range(Start:=groupStart, End:=groupEnd)
+    Set grp = doc.Range(Start:=gStart, End:=gEnd)
 
-    Dim startPos As Long
-    startPos = grp.Start
+    Dim startPos As Long: startPos = grp.Start
 
     Dim val As String
     val = CStr(dictUS(key))
     grp.Text = val
 
     If addReasons And dictUSWhy.Exists(key) Then
-        Dim rr As Range
-        Set rr = doc.Range(startPos, startPos + Len(val))
-        AddCommentSafe doc, rr, "Reason: " & LimitLen(CStr(dictUSWhy(key)), 220)
+        AddCommentSafe doc, doc.Range(startPos, startPos + Len(val)), _
+            "Reason: " & Clip(CStr(dictUSWhy(key)), 220)
     End If
 End Sub
 
@@ -555,8 +546,7 @@ Private Sub ApplyCheckboxGroups(ByVal doc As Document, ByVal dictCB As Object, B
 End Sub
 
 Private Sub ApplyOneCheckboxGroup(ByVal doc As Document, ByVal dictCB As Object, ByVal dictCBWhy As Object, ByVal addReasons As Boolean, ByVal groupOcc As Long, ByVal paraStart As Long, ByRef boxOffsets() As Long, ByVal boxCount As Long)
-    Dim key As String
-    key = CStr(groupOcc)
+    Dim key As String: key = CStr(groupOcc)
     If Not dictCB.Exists(key) Then Exit Sub
 
     Dim indicesCsv As String
@@ -565,8 +555,7 @@ Private Sub ApplyOneCheckboxGroup(ByVal doc As Document, ByVal dictCB As Object,
     Dim idxParts() As String
     idxParts = Split(indicesCsv, ",")
 
-    Dim firstMarkedStart As Long
-    firstMarkedStart = -1
+    Dim firstMarkedStart As Long: firstMarkedStart = -1
 
     Dim i As Long
     For i = LBound(idxParts) To UBound(idxParts)
@@ -588,9 +577,8 @@ Private Sub ApplyOneCheckboxGroup(ByVal doc As Document, ByVal dictCB As Object,
     Next i
 
     If addReasons And firstMarkedStart <> -1 And dictCBWhy.Exists(key) Then
-        Dim rr As Range
-        Set rr = doc.Range(firstMarkedStart, firstMarkedStart + 3)
-        AddCommentSafe doc, rr, "Reason: " & LimitLen(CStr(dictCBWhy(key)), 220)
+        AddCommentSafe doc, doc.Range(firstMarkedStart, firstMarkedStart + 3), _
+            "Reason: " & Clip(CStr(dictCBWhy(key)), 220)
     End If
 End Sub
 
@@ -598,12 +586,12 @@ End Sub
 ' AUDIT RESPONSE PARSER
 ' ==========================================================
 Private Function ParseAuditResponse(ByVal resp As String, ByRef summary As String) As Boolean
-    Dim line As String
-    line = Trim$(NormalizeNewlines(resp))
+    Dim ln As String
+    ln = Trim$(NormLF(resp))
     summary = ""
 
     Dim parts() As String
-    parts = Split(line, "|")
+    parts = Split(ln, "|")
     If UBound(parts) < 2 Then
         ParseAuditResponse = False
         summary = "Invalid audit response format."
@@ -616,57 +604,88 @@ Private Function ParseAuditResponse(ByVal resp As String, ByRef summary As Strin
         Exit Function
     End If
 
-    summary = UrlDecode(parts(2))
+    summary = UrlDec(parts(2))
     ParseAuditResponse = (parts(1) = "OK")
 End Function
 
 ' ==========================================================
-' FIX TEXT BY INSTRUCTION COMMENTS (tracked)
+' FIX TEXT BY INSTRUCTION COMMENTS  (tracked)
+'
 ' Comment text must start with FIX: / INSTR: / EDIT:
-' Uses Len(instr) > 0 to avoid quote-related paste issues
+'
+' Bug-fix vs original: we now COLLECT all instruction
+' comments first, then process them BACK-TO-FRONT so that
+' character-position shifts from earlier replacements never
+' corrupt later ones.
 ' ==========================================================
-Public Sub FixTextByInstructionComments_Tracked(ByVal doc As Document)
+Public Sub FixTextByInstructionComments(ByVal doc As Document)
     Dim prevTrack As Boolean
     prevTrack = doc.TrackRevisions
     doc.TrackRevisions = True
 
     On Error GoTo CleanFail
 
+    Dim commentCount As Long
+    commentCount = doc.Comments.Count
+    If commentCount = 0 Then GoTo CleanExit
+
+    ' ── 1. Collect instruction comments ──
+    Dim instrTexts() As String
+    Dim scopeStarts() As Long
+    Dim scopeEnds() As Long
+    Dim selTexts() As String
+    Dim instrCount As Long: instrCount = 0
+
+    ReDim instrTexts(1 To commentCount)
+    ReDim scopeStarts(1 To commentCount)
+    ReDim scopeEnds(1 To commentCount)
+    ReDim selTexts(1 To commentCount)
+
     Dim i As Long
-    Dim instr As String
+    For i = 1 To commentCount
+        Dim rawComment As String
+        rawComment = doc.Comments(i).Range.Text
 
-    For i = 1 To doc.Comments.Count
-        instr = NormalizeInstructionPrefix(doc.Comments(i).Range.Text)
+        Dim instrText As String
+        instrText = ExtractInstruction(rawComment)
 
-        If Len(instr) > 0 Then
-            Dim target As Range
-            Set target = doc.Comments(i).Scope.Duplicate
-
-            Dim selectedText As String
-            selectedText = LimitLen(target.Text, 5000)
-
-            Dim payload As String
-            payload = BuildRevisePayload(doc.Name, instr, selectedText)
-
-            Dim resp As String
-            resp = HttpPostJson(REVISE_URL, payload)
-
-            Dim revised As String
-            Dim reason As String
-
-            If ParseReviseResponse(resp, revised, reason) Then
-                Dim startPos As Long
-                startPos = target.Start
-
-                target.Text = revised
-
-                Dim applied As Range
-                Set applied = doc.Range(startPos, startPos + Len(revised))
-
-                AddCommentSafe doc, applied, "Applied fix. " & LimitLen(reason, 220)
-            End If
+        If Len(instrText) > 0 Then
+            instrCount = instrCount + 1
+            instrTexts(instrCount) = instrText
+            scopeStarts(instrCount) = doc.Comments(i).Scope.Start
+            scopeEnds(instrCount) = doc.Comments(i).Scope.End
+            selTexts(instrCount) = Clip(doc.Comments(i).Scope.Text, 5000)
         End If
     Next i
+
+    If instrCount = 0 Then GoTo CleanExit
+
+    ' ── 2. Process back-to-front ──
+    Dim j As Long
+    For j = instrCount To 1 Step -1
+        Dim payload As String
+        payload = BuildRevisePayload(doc.Name, doc.Path, instrTexts(j), selTexts(j))
+
+        Dim resp As String
+        resp = HttpPostJson(REVISE_URL, payload)
+
+        Dim revised As String
+        Dim reason As String
+
+        If ParseReviseResponse(resp, revised, reason) Then
+            Dim target As Range
+            Set target = doc.Range(scopeStarts(j), scopeEnds(j))
+
+            Dim startPos As Long
+            startPos = target.Start
+
+            target.Text = revised
+
+            Dim applied As Range
+            Set applied = doc.Range(startPos, startPos + Len(revised))
+            AddCommentSafe doc, applied, "Applied fix. " & Clip(reason, 220)
+        End If
+    Next j
 
 CleanExit:
     doc.TrackRevisions = prevTrack
@@ -677,44 +696,45 @@ CleanFail:
     MsgBox "Fix-by-comments failed: " & Err.Description, vbExclamation, "Form filler"
 End Sub
 
-Private Function NormalizeInstructionPrefix(ByVal commentText As String) As String
+Private Function ExtractInstruction(ByVal commentText As String) As String
     Dim t As String
     t = Trim$(commentText)
 
     If Len(t) >= 4 And UCase$(Left$(t, 4)) = "FIX:" Then
-        NormalizeInstructionPrefix = Trim$(Mid$(t, 5))
+        ExtractInstruction = Trim$(Mid$(t, 5))
         Exit Function
     End If
     If Len(t) >= 6 And UCase$(Left$(t, 6)) = "INSTR:" Then
-        NormalizeInstructionPrefix = Trim$(Mid$(t, 7))
+        ExtractInstruction = Trim$(Mid$(t, 7))
         Exit Function
     End If
     If Len(t) >= 5 And UCase$(Left$(t, 5)) = "EDIT:" Then
-        NormalizeInstructionPrefix = Trim$(Mid$(t, 6))
+        ExtractInstruction = Trim$(Mid$(t, 6))
         Exit Function
     End If
 
-    NormalizeInstructionPrefix = vbNullString
+    ExtractInstruction = vbNullString
 End Function
 
-Private Function BuildRevisePayload(ByVal docName As String, ByVal instruction As String, ByVal selectedText As String) As String
+Private Function BuildRevisePayload(ByVal docName As String, ByVal docFolder As String, ByVal instruction As String, ByVal selectedText As String) As String
     BuildRevisePayload = "{" & _
-        """doc_name"":""" & JsonEscapeStrict(docName) & """," & _
-        """instruction"":""" & JsonEscapeStrict(instruction) & """," & _
-        """selected_text"":""" & JsonEscapeStrict(selectedText) & """" & _
+        """doc_name"":""" & JsonEsc(docName) & """," & _
+        """doc_folder"":""" & JsonEsc(docFolder) & """," & _
+        """instruction"":""" & JsonEsc(instruction) & """," & _
+        """selected_text"":""" & JsonEsc(selectedText) & """" & _
     "}"
 End Function
 
 Private Function ParseReviseResponse(ByVal resp As String, ByRef revised As String, ByRef reason As String) As Boolean
-    Dim line As String
-    line = Trim$(NormalizeNewlines(resp))
-    If Len(line) = 0 Then
+    Dim ln As String
+    ln = Trim$(NormLF(resp))
+    If Len(ln) = 0 Then
         ParseReviseResponse = False
         Exit Function
     End If
 
     Dim parts() As String
-    parts = Split(line, "|")
+    parts = Split(ln, "|")
     If UBound(parts) < 2 Then
         ParseReviseResponse = False
         Exit Function
@@ -724,8 +744,8 @@ Private Function ParseReviseResponse(ByVal resp As String, ByRef revised As Stri
         Exit Function
     End If
 
-    revised = UrlDecode(parts(1))
-    reason = UrlDecode(parts(2))
+    revised = UrlDec(parts(1))
+    reason = UrlDec(parts(2))
     ParseReviseResponse = True
 End Function
 
@@ -744,7 +764,7 @@ Private Function SaveTempTextSnapshot(ByVal doc As Document) As String
     fullPath = tempFolder & fileName
 
     Dim snapshot As String
-    snapshot = LimitLen(doc.Content.Text, 50000)
+    snapshot = Clip(doc.Content.Text, 50000)
 
     WriteUtf8Text fullPath, snapshot
     SaveTempTextSnapshot = fullPath
@@ -762,11 +782,14 @@ Private Sub WriteUtf8Text(ByVal path As String, ByVal text As String)
 End Sub
 
 ' ==========================================================
-' HTTP
+' HTTP  (timeout raised for LLM round-trips)
 ' ==========================================================
 Private Function HttpPostJson(ByVal url As String, ByVal body As String) As String
     Dim http As Object
     Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+
+    ' resolve, connect, send, receive (ms)
+    http.SetTimeouts 10000, 10000, 30000, 120000
 
     http.Open "POST", url, False
     http.SetRequestHeader "Content-Type", "application/json; charset=utf-8"
@@ -784,7 +807,7 @@ End Function
 ' ==========================================================
 Private Sub AddCommentSafe(ByVal doc As Document, ByVal r As Range, ByVal text As String)
     On Error Resume Next
-    doc.Comments.Add Range:=r, Text:=text
+    doc.Comments.Add Range:=r, text:=text
     On Error GoTo 0
 End Sub
 
@@ -851,29 +874,29 @@ Private Function ExtractPlaceholderKey(ByVal token As String) As String
 End Function
 
 Private Function GetContextAroundRange(ByVal r As Range, ByVal charsEachSide As Long, ByVal doc As Document) As String
-    Dim startPos As Long, endPos As Long
-    startPos = r.Start - charsEachSide
-    If startPos < 0 Then startPos = 0
+    Dim s As Long, e As Long
+    s = r.Start - charsEachSide
+    If s < 0 Then s = 0
 
-    endPos = r.End + charsEachSide
-    If endPos > doc.Content.End Then endPos = doc.Content.End
+    e = r.End + charsEachSide
+    If e > doc.Content.End Then e = doc.Content.End
 
     Dim ctx As Range
-    Set ctx = doc.Range(Start:=startPos, End:=endPos)
+    Set ctx = doc.Range(Start:=s, End:=e)
     GetContextAroundRange = ctx.Text
 End Function
 
-Private Function LimitLen(ByVal s As String, ByVal maxLen As Long) As String
-    If Len(s) > maxLen Then LimitLen = Left$(s, maxLen) Else LimitLen = s
+Private Function Clip(ByVal s As String, ByVal maxLen As Long) As String
+    If Len(s) > maxLen Then Clip = Left$(s, maxLen) Else Clip = s
 End Function
 
-Private Function NormalizeNewlines(ByVal s As String) As String
+Private Function NormLF(ByVal s As String) As String
     s = Replace(s, vbCrLf, vbLf)
     s = Replace(s, vbCr, vbLf)
-    NormalizeNewlines = s
+    NormLF = s
 End Function
 
-Private Function UrlDecode(ByVal s As String) As String
+Private Function UrlDec(ByVal s As String) As String
     Dim i As Long, out As String, c As String
     out = ""
     i = 1
@@ -887,10 +910,10 @@ Private Function UrlDecode(ByVal s As String) As String
             i = i + 1
         End If
     Loop
-    UrlDecode = out
+    UrlDec = out
 End Function
 
-Private Function JsonEscapeStrict(ByVal s As String) As String
+Private Function JsonEsc(ByVal s As String) As String
     Dim i As Long, ch As Integer, out As String
     out = ""
     For i = 1 To Len(s)
@@ -909,5 +932,5 @@ Private Function JsonEscapeStrict(ByVal s As String) As String
                 out = out & ChrW(ch)
         End Select
     Next i
-    JsonEscapeStrict = out
+    JsonEsc = out
 End Function
