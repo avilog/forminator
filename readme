@@ -1,20 +1,68 @@
-Save your doc as .docm
+Forminator – AI-powered Word form filler
+========================================
 
-Alt+F11 → Insert → Module
+Fills Word document forms automatically using an LLM.
+Detects content controls, <<placeholders>>, underscores, and [ ] checkboxes.
+People can also leave FIX:/INSTR:/EDIT: comments on text and the LLM will
+rewrite it according to the instruction.
 
-Paste the code below
 
-Run: Alt+F8 → FillForm_Tracked_ByPython
+1. Install Python dependencies
+-------------------------------
+    pip install fastapi uvicorn
 
 
-Quick Access Toolbar button (fastest, no extra files)
+2. Configure the LLM
+---------------------
+Set environment variables before starting the server:
 
-Word → File → Options → Quick Access Toolbar
+    # Any OpenAI-compatible API (OpenAI, Azure, local, etc.)
+    export LLM_API_KEY="sk-..."
+    export LLM_BASE_URL="https://api.openai.com/v1"   # default
+    export LLM_MODEL="gpt-4o"                          # default
 
-In “Choose commands from”: select Macros
+If LLM_API_KEY is empty the server runs in demo mode (hard-coded fill values).
 
-Select FillForm_Tracked_ByPython → Add >>
 
-Click Modify… → pick an icon + display name (e.g., “Fill Form”) → OK
+3. Start the server
+-------------------
+    uvicorn python_form_filler:app --reload --host 127.0.0.1 --port 8000
 
-This gives you a clickable icon button immediately.
+Visit http://127.0.0.1:8000 to verify it's running and see the current mode.
+
+
+4. Set up Word
+--------------
+Save your doc as .docm (macro-enabled).
+
+    Alt+F11 → Insert → Module → paste the contents of word.vba
+
+Run:  Alt+F8 → FillForm_Tracked_ByPython
+
+
+Quick Access Toolbar button (recommended)
+    Word → File → Options → Quick Access Toolbar
+    "Choose commands from" → Macros
+    Select FillForm_Tracked_ByPython → Add >>
+    Click Modify… → pick an icon + display name (e.g. "Fill Form") → OK
+
+
+5. Context files
+----------------
+Drop .txt files in the same folder as your Word document.
+The server reads them automatically and feeds their content to the LLM
+as reference material when filling fields or revising text.
+
+Example: put "employee_data.txt" next to the form and the LLM will use
+the information inside to fill name, address, date, etc.
+
+
+6. Fix text by comments
+------------------------
+Add a Word comment on any text starting with one of:
+    FIX:   make this more formal
+    INSTR: translate to Spanish
+    EDIT:  shorten to one sentence
+
+After the macro fills the form, it scans for these comments and sends
+each one to the LLM for revision. Changes appear as tracked changes.
