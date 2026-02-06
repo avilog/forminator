@@ -1,0 +1,20 @@
+Save your doc as .docm
+
+Alt+F11 → Insert → Module
+
+Paste the code below
+
+Run: Alt+F8 → FillForm_Tracked_ByPython
+
+
+Quick Access Toolbar button (fastest, no extra files)
+
+Word → File → Options → Quick Access Toolbar
+
+In “Choose commands from”: select Macros
+
+Select FillForm_Tracked_ByPython → Add >>
+
+Click Modify… → pick an icon + display name (e.g., “Fill Form”) → OK
+
+This gives you a clickable icon button immediately.
