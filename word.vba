@@ -10,7 +10,7 @@ Private Const REVISE_URL As String = API_BASE & "/revise"
 
 Private Const DEEP_CONTEXT As Boolean = True            ' send temp text snapshot path
 Private Const APPLY_REASONS_COMMENTS As Boolean = True  ' add "Reason:" comments after fills
-Private Const FIX_FROM_COMMENTS As Boolean = True       ' apply FIX:/INSTR:/EDIT: comments after fill
+Private Const FIX_FROM_COMMENTS As Boolean = True       ' apply user comments as revision instructions after fill
 
 ' =======================
 ' ENTRY POINT
@@ -611,12 +611,12 @@ End Function
 ' ==========================================================
 ' FIX TEXT BY INSTRUCTION COMMENTS  (tracked)
 '
-' Comment text must start with FIX: / INSTR: / EDIT:
+' Any user comment is treated as a revision instruction.
+' AI-generated comments (Reason: / Applied fix.) are skipped.
 '
-' Bug-fix vs original: we now COLLECT all instruction
-' comments first, then process them BACK-TO-FRONT so that
-' character-position shifts from earlier replacements never
-' corrupt later ones.
+' Comments are collected first, then processed BACK-TO-FRONT
+' so that character-position shifts from earlier replacements
+' never corrupt later ones.
 ' ==========================================================
 Public Sub FixTextByInstructionComments(ByVal doc As Document)
     Dim prevTrack As Boolean
@@ -697,23 +697,28 @@ CleanFail:
 End Sub
 
 Private Function ExtractInstruction(ByVal commentText As String) As String
+    ' Return the comment text as an instruction UNLESS it was generated
+    ' by this macro (Reason: / Applied fix.). Any normal user comment
+    ' is treated as a revision instruction.
     Dim t As String
     t = Trim$(commentText)
 
-    If Len(t) >= 4 And UCase$(Left$(t, 4)) = "FIX:" Then
-        ExtractInstruction = Trim$(Mid$(t, 5))
-        Exit Function
-    End If
-    If Len(t) >= 6 And UCase$(Left$(t, 6)) = "INSTR:" Then
-        ExtractInstruction = Trim$(Mid$(t, 7))
-        Exit Function
-    End If
-    If Len(t) >= 5 And UCase$(Left$(t, 5)) = "EDIT:" Then
-        ExtractInstruction = Trim$(Mid$(t, 6))
+    If Len(t) = 0 Then
+        ExtractInstruction = vbNullString
         Exit Function
     End If
 
-    ExtractInstruction = vbNullString
+    ' Skip AI-generated comments
+    Dim u As String: u = UCase$(t)
+    If Left$(u, 7) = "REASON:" Then ExtractInstruction = vbNullString: Exit Function
+    If Left$(u, 12) = "APPLIED FIX." Then ExtractInstruction = vbNullString: Exit Function
+
+    ' Strip optional FIX:/INSTR:/EDIT: prefix if user still uses them
+    If Left$(u, 4) = "FIX:" Then t = Trim$(Mid$(t, 5))
+    If Left$(u, 6) = "INSTR:" Then t = Trim$(Mid$(t, 7))
+    If Left$(u, 5) = "EDIT:" Then t = Trim$(Mid$(t, 6))
+
+    ExtractInstruction = t
 End Function
 
 Private Function BuildRevisePayload(ByVal docName As String, ByVal docFolder As String, ByVal instruction As String, ByVal selectedText As String) As String
