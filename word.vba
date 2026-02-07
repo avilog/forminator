@@ -10,7 +10,7 @@ Private Const REVISE_URL As String = API_BASE & "/revise"
 
 Private Const DEEP_CONTEXT As Boolean = True            ' send temp text snapshot path
 Private Const APPLY_REASONS_COMMENTS As Boolean = True  ' add "Reason:" comments after fills
-Private Const FIX_FROM_COMMENTS As Boolean = True       ' apply FIX:/INSTR:/EDIT: comments after fill
+Private Const FIX_FROM_COMMENTS As Boolean = True       ' apply user comments as revision instructions after fill
 
 ' =======================
 ' ENTRY POINT
@@ -126,13 +126,35 @@ Private Function CollectContentControlsJson(ByVal doc As Document) As String
         first = False
 
         Dim ctx As String
-        ctx = GetContextAroundRange(cc.Range, 150, doc)
+        ctx = GetContextAroundRange(cc.Range, 200, doc)
+
+        ' Current text / placeholder text
+        Dim curText As String
+        curText = ""
+        On Error Resume Next
+        curText = cc.Range.Text
+        On Error GoTo 0
+        If cc.ShowingPlaceholderText Then curText = "[placeholder] " & curText
+
+        ' Dropdown / combobox options
+        Dim opts As String: opts = ""
+        If cc.Type = wdContentControlDropdownList Or cc.Type = wdContentControlComboBox Then
+            Dim de As ContentControlListEntry
+            Dim optFirst As Boolean: optFirst = True
+            For Each de In cc.DropdownListEntries
+                If Not optFirst Then opts = opts & ", "
+                optFirst = False
+                opts = opts & de.Text
+            Next de
+        End If
 
         parts = parts & "{"
         parts = parts & """id"":" & CStr(cc.ID) & ","
         parts = parts & """tag"":""" & JsonEsc(cc.Tag) & ""","
         parts = parts & """title"":""" & JsonEsc(cc.Title) & ""","
         parts = parts & """cc_type"":""" & JsonEsc(ContentControlTypeName(cc.Type)) & ""","
+        parts = parts & """current_text"":""" & JsonEsc(Clip(curText, 200)) & ""","
+        parts = parts & """options"":""" & JsonEsc(Clip(opts, 500)) & ""","
         parts = parts & """context"":""" & JsonEsc(Clip(ctx, 600)) & """"
         parts = parts & "}"
     Next cc
@@ -164,7 +186,7 @@ Private Function CollectPlaceholdersJson(ByVal doc As Document) As String
 
         Dim token As String: token = r.Text
         Dim key As String: key = ExtractPlaceholderKey(token)
-        Dim ctx As String: ctx = GetContextAroundRange(r, 150, doc)
+        Dim ctx As String: ctx = GetContextAroundRange(r, 200, doc)
 
         If Not first Then parts = parts & ","
         first = False
@@ -224,7 +246,7 @@ Private Function CollectUnderscoreRunsJson(ByVal doc As Document) As String
                 Dim grp As Range
                 Set grp = doc.Range(Start:=groupStart, End:=groupEnd)
                 Dim ctx As String
-                ctx = GetContextAroundRange(grp, 150, doc)
+                ctx = GetContextAroundRange(grp, 200, doc)
 
                 parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctx, 600)) & """}"
 
@@ -244,7 +266,7 @@ Private Function CollectUnderscoreRunsJson(ByVal doc As Document) As String
         Dim grpLast As Range
         Set grpLast = doc.Range(Start:=groupStart, End:=groupEnd)
         Dim ctxLast As String
-        ctxLast = GetContextAroundRange(grpLast, 150, doc)
+        ctxLast = GetContextAroundRange(grpLast, 200, doc)
 
         parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctxLast, 600)) & """}"
     End If
@@ -307,7 +329,7 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
                 first = False
 
                 Dim ctx As String
-                ctx = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 150, doc)
+                ctx = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 200, doc)
 
                 parts = parts & "{""occurrence"":" & CStr(groupOcc) & _
                                 ",""text"":""" & JsonEsc(Clip(curParaText, 800)) & """" & _
@@ -328,7 +350,24 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
         Dim off As Long
         off = scan.Start - curParaStart
 
-        boxesJson = boxesJson & "{""index"":" & CStr(boxCount) & ",""offset"":" & CStr(off) & ",""label"":""""}"
+        ' Extract label: text from end of "[ ]" to next "[ ]" or end of paragraph
+        Dim lblStart As Long: lblStart = scan.End
+        Dim lblEnd As Long: lblEnd = pEnd - 1   ' exclude paragraph mark
+        Dim lblRange As Range
+        Set lblRange = doc.Range(lblStart, lblEnd)
+        Dim lblText As String: lblText = ""
+        ' Look for next "[ ]" in remaining para text to trim label
+        Dim nextBox As Long
+        nextBox = InStr(lblRange.Text, "[ ]")
+        If nextBox > 0 Then
+            lblText = Trim$(Left$(lblRange.Text, nextBox - 1))
+        Else
+            lblText = Trim$(lblRange.Text)
+        End If
+        ' Clean up common separators
+        If Right$(lblText, 1) = "," Or Right$(lblText, 1) = ";" Then lblText = Trim$(Left$(lblText, Len(lblText) - 1))
+
+        boxesJson = boxesJson & "{""index"":" & CStr(boxCount) & ",""offset"":" & CStr(off) & ",""label"":""" & JsonEsc(Clip(lblText, 100)) & """}"
 
         scan.Collapse wdCollapseEnd
     Loop
@@ -341,7 +380,7 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
         first = False
 
         Dim ctxLast As String
-        ctxLast = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 150, doc)
+        ctxLast = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 200, doc)
 
         parts = parts & "{""occurrence"":" & CStr(groupOcc) & _
                         ",""text"":""" & JsonEsc(Clip(curParaText, 800)) & """" & _
@@ -637,12 +676,12 @@ End Function
 ' ==========================================================
 ' FIX TEXT BY INSTRUCTION COMMENTS  (tracked)
 '
-' Comment text must start with FIX: / INSTR: / EDIT:
+' Any user comment is treated as a revision instruction.
+' AI-generated comments (Reason: / Applied fix.) are skipped.
 '
-' Bug-fix vs original: we now COLLECT all instruction
-' comments first, then process them BACK-TO-FRONT so that
-' character-position shifts from earlier replacements never
-' corrupt later ones.
+' Comments are collected first, then processed BACK-TO-FRONT
+' so that character-position shifts from earlier replacements
+' never corrupt later ones.
 ' ==========================================================
 Public Sub FixTextByInstructionComments(ByVal doc As Document)
     Dim prevTrack As Boolean
@@ -723,23 +762,28 @@ CleanFail:
 End Sub
 
 Private Function ExtractInstruction(ByVal commentText As String) As String
+    ' Return the comment text as an instruction UNLESS it was generated
+    ' by this macro (Reason: / Applied fix.). Any normal user comment
+    ' is treated as a revision instruction.
     Dim t As String
     t = Trim$(commentText)
 
-    If Len(t) >= 4 And UCase$(Left$(t, 4)) = "FIX:" Then
-        ExtractInstruction = Trim$(Mid$(t, 5))
-        Exit Function
-    End If
-    If Len(t) >= 6 And UCase$(Left$(t, 6)) = "INSTR:" Then
-        ExtractInstruction = Trim$(Mid$(t, 7))
-        Exit Function
-    End If
-    If Len(t) >= 5 And UCase$(Left$(t, 5)) = "EDIT:" Then
-        ExtractInstruction = Trim$(Mid$(t, 6))
+    If Len(t) = 0 Then
+        ExtractInstruction = vbNullString
         Exit Function
     End If
 
-    ExtractInstruction = vbNullString
+    ' Skip AI-generated comments
+    Dim u As String: u = UCase$(t)
+    If Left$(u, 7) = "REASON:" Then ExtractInstruction = vbNullString: Exit Function
+    If Left$(u, 12) = "APPLIED FIX." Then ExtractInstruction = vbNullString: Exit Function
+
+    ' Strip optional FIX:/INSTR:/EDIT: prefix if user still uses them
+    If Left$(u, 4) = "FIX:" Then t = Trim$(Mid$(t, 5))
+    If Left$(u, 6) = "INSTR:" Then t = Trim$(Mid$(t, 7))
+    If Left$(u, 5) = "EDIT:" Then t = Trim$(Mid$(t, 6))
+
+    ExtractInstruction = t
 End Function
 
 Private Function BuildRevisePayload(ByVal docName As String, ByVal docFolder As String, ByVal instruction As String, ByVal selectedText As String) As String
@@ -885,6 +929,7 @@ Private Function ContentControlTypeName(ByVal t As Long) As String
         Case wdContentControlDate: ContentControlTypeName = "date"
         Case wdContentControlDropdownList: ContentControlTypeName = "dropdown"
         Case wdContentControlComboBox: ContentControlTypeName = "combobox"
+        Case 8: ContentControlTypeName = "checkbox"  ' wdContentControlCheckBox (Word 2010+)
         Case Else: ContentControlTypeName = "other"
     End Select
 End Function

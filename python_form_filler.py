@@ -43,6 +43,8 @@ class ContentControlInfo(BaseModel):
     tag: str = ""
     title: str = ""
     cc_type: str = ""
+    current_text: str = ""
+    options: str = ""
     context: str = ""
 
 
@@ -236,8 +238,10 @@ Respond with ONLY valid JSON — no markdown fences, no extra text:
 
 Rules:
 - Use information from reference files when available.
-- Match the expected format (dates, names, etc.) implied by surrounding text.
-- For checkboxes, return 1-based indices of the boxes to mark.
+- Match the expected format (dates, names, etc.) implied by the surrounding context.
+- For dropdown/combobox fields, you MUST pick one of the listed options exactly.
+- For checkboxes, return 1-based indices of the boxes to mark. Use the labels to decide.
+- For underscore blanks, read the surrounding context carefully — it tells you what goes there.
 - Keep each reason under 30 words.
 - Include an entry for EVERY field, even if you must make a reasonable guess.
 - Omit a section key entirely if there are no fields of that type.\
@@ -258,37 +262,44 @@ def _build_fill_user(req: FillRequest, doc_text: str, ctx_files: str) -> str:
             lines.append(
                 f'- ID={cc.id}  tag="{cc.tag}"  title="{cc.title}"  type={cc.cc_type}'
             )
+            if cc.current_text:
+                lines.append(f"  Current text: {cc.current_text[:200]}")
+            if cc.options:
+                lines.append(f"  Options (pick one): {cc.options[:400]}")
             if cc.context:
-                lines.append(f"  Context: {clean_context(cc.context, 300)}")
+                lines.append(f"  Surrounding text: {clean_context(cc.context, 400)}")
         sections.append("\n".join(lines))
 
     if req.placeholders:
-        lines = ["## Placeholders"]
+        lines = ["## Placeholders (<<KEY>> tokens to replace)"]
         for p in req.placeholders:
             lines.append(f'- Token="{p.token}"  key="{p.key}"')
             if p.context:
-                lines.append(f"  Context: {clean_context(p.context, 300)}")
+                lines.append(f"  Surrounding text: {clean_context(p.context, 400)}")
         sections.append("\n".join(lines))
 
     if req.underscore_runs:
-        lines = ["## Underscore Blanks"]
+        lines = ["## Underscore Blanks (fill-in-the-blank lines)"]
         for u in req.underscore_runs:
-            lines.append(f"- Occurrence={u.occurrence}")
+            lines.append(f"- Blank #{u.occurrence}")
             if u.context:
-                lines.append(f"  Context: {clean_context(u.context, 300)}")
+                lines.append(f"  Surrounding text: {clean_context(u.context, 400)}")
         sections.append("\n".join(lines))
 
     if req.checkbox_groups:
-        lines = ["## Checkbox Groups"]
+        lines = ["## Checkbox Groups (select which boxes to check)"]
         for g in req.checkbox_groups:
             box_labels = ", ".join(
-                f'Box{b.index}="{b.label}"' for b in g.boxes
+                f'Box{b.index}="{b.label}"' if b.label
+                else f"Box{b.index}" for b in g.boxes
             )
             lines.append(
-                f'- Occ={g.occurrence}  text="{clean_context(g.text, 200)}"  boxes=[{box_labels}]'
+                f'- Group {g.occurrence}:  boxes=[{box_labels}]'
             )
+            if g.text:
+                lines.append(f"  Paragraph text: {clean_context(g.text, 300)}")
             if g.context:
-                lines.append(f"  Context: {clean_context(g.context, 300)}")
+                lines.append(f"  Surrounding text: {clean_context(g.context, 400)}")
         sections.append("\n".join(lines))
 
     return "\n\n".join(sections)

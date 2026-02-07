@@ -3,9 +3,170 @@ Forminator – AI-powered Word form filler
 
 Fills Word document forms automatically using an LLM.
 Detects content controls, <<placeholders>>, underscores, and [ ] checkboxes.
-People can also leave FIX:/INSTR:/EDIT: comments on text and the LLM will
-rewrite it according to the instruction.
+People can also leave comments on any text and the LLM will rewrite it
+according to the instruction.
 
+
+How it works
+============
+
+Architecture diagram
+--------------------
+
+    +------------------+          +------------------+          +------------------+
+    |   Microsoft Word |          |  Python server   |          |   LLM service    |
+    |   (VBA macro)    |          |  (FastAPI)       |          |   (OpenAI etc.)  |
+    +--------+---------+          +--------+---------+          +--------+---------+
+             |                             |                             |
+             |  1. User clicks "Fill Form" |                             |
+             |                             |                             |
+             |  2. Extract all fields      |                             |
+             |     (CC, <<PH>>, ___, [ ])  |                             |
+             |                             |                             |
+             |  3. POST /audit  ---------> |                             |
+             |     {fields, doc_text,      |                             |
+             |      doc_folder}            |                             |
+             |  <--------- AUDIT|OK|...    |                             |
+             |                             |                             |
+             |  4. POST /fill  ----------> |  5. Build prompt ---------> |
+             |     {fields, doc_text,      |     with doc text,          |
+             |      doc_folder}            |     context .txt files,     |
+             |                             |     and field details       |
+             |                             |                             |
+             |                             |  <--------- JSON response   |
+             |                             |     {values + reasons}      |
+             |  <--------- CC|id|val|why   |                             |
+             |             PH|tok|val|why   |  6. Convert JSON to        |
+             |             US|occ|val|why   |     pipe-delimited lines   |
+             |             CB|occ|sel|why   |                             |
+             |                             |                             |
+             |  7. Apply fills as          |                             |
+             |     tracked changes         |                             |
+             |     + add Reason comments   |                             |
+             |                             |                             |
+             |  8. For each user comment   |                             |
+             |     (skip AI-generated):    |                             |
+             |     POST /revise ---------> |  9. Send to LLM ----------> |
+             |     {instruction, text,     |                             |
+             |      doc_folder}            |  <--------- revised text    |
+             |  <--------- REV|text|why    |                             |
+             |                             |                             |
+             | 10. Replace text as         |                             |
+             |     tracked change          |                             |
+             +-----------------------------+-----------------------------+
+
+
+    Document folder (same dir as .docm):
+    +-------------------------------------------+
+    |  MyForm.docm                              |
+    |  employee_data.txt  <-- context file      |
+    |  project_info.txt   <-- context file      |
+    |  notes.txt          <-- context file      |
+    +-------------------------------------------+
+    All .txt files are read by the server and sent to the LLM as reference.
+
+
+Step-by-step explanation
+------------------------
+
+1. USER CLICKS THE MACRO
+   The user opens a Word document (.docm) and clicks "Fill Form" (or runs
+   FillForm_Tracked_ByPython via Alt+F8). Track Changes is turned on.
+
+2. FIELD EXTRACTION
+   The VBA macro scans the entire document and extracts every form field
+   it can find. It supports four types:
+
+   - Content Controls: Word's built-in form controls (text boxes, date
+     pickers, dropdowns). Identified by their ID, tag, and title.
+
+   - Placeholders: <<FIELD_NAME>> tokens in the document text. The macro
+     uses a wildcard search to find them.
+
+   - Underscore blanks: Runs of 4+ underscores (e.g. ____________).
+     Contiguous runs are grouped together. Common in printed-style forms.
+
+   - Checkboxes: [ ] markers in the text. Grouped by paragraph so the
+     LLM can understand "check Yes or No" style questions.
+
+   For each field, the macro also captures ~80 characters of surrounding
+   text as local context, so the LLM knows what the field is for.
+
+3. AUDIT
+   The extracted fields are sent as JSON to POST /audit. The server does
+   basic sanity checks: are there any fields at all? Are underscore
+   occurrences numbered correctly? Are checkbox groups valid? It also
+   reports whether LLM mode or demo mode is active, and lists any .txt
+   context files found in the document's folder.
+
+   If the audit fails (e.g. no fields detected), the macro stops and
+   shows the user what went wrong.
+
+4. FILL REQUEST
+   The same payload goes to POST /fill. The server now builds a detailed
+   prompt for the LLM containing:
+   - The full document text (up to 15,000 chars)
+   - All .txt files from the document's folder (up to 30,000 chars)
+   - Every field with its type, name/tag, and surrounding context
+
+5. LLM DECIDES VALUES
+   The LLM receives the prompt and returns a JSON object with a value and
+   brief reason for every field. For example:
+     {"content_controls": [{"id": 42, "value": "Jane Smith",
+       "reason": "Name found in employee_data.txt"}]}
+
+6. RESPONSE CONVERSION
+   The server converts the LLM's JSON into a simple pipe-delimited text
+   format that the VBA macro can parse without a JSON library:
+     CC|42|Jane%20Smith|Name%20found%20in%20employee_data.txt
+
+7. APPLY FILLS
+   Back in Word, the macro parses each line and applies the values:
+   - Content controls: sets Range.Text
+   - Placeholders: Find-and-Replace across the document
+   - Underscores: replaces the underscore run with the value
+   - Checkboxes: changes [ ] to [X] for selected options
+
+   All changes are tracked. If reasons are enabled, a Word comment is
+   added to each filled field explaining why the LLM chose that value.
+
+8-9. REVISE STAGE
+   After filling, the macro scans all Word comments. Any comment that
+   was NOT generated by the macro itself (i.e. not starting with
+   "Reason:" or "Applied fix.") is treated as a revision instruction.
+   The highlighted text + the comment are sent to POST /revise. The
+   server asks the LLM to rewrite the text accordingly.
+
+   For example, a user highlights a paragraph and adds a comment:
+   "make this more formal" — the LLM rewrites the paragraph.
+
+   Comments are processed back-to-front (last comment first) so that
+   text replacements don't shift the positions of earlier comments.
+
+10. APPLY REVISIONS
+    Each revised text replaces the original as a tracked change, with a
+    new comment noting what was done. The user can review and accept/reject.
+
+
+Why this design?
+----------------
+- Track Changes: every modification is visible and reversible. Nothing is
+  silently overwritten. This builds trust for enterprise/legal use cases.
+
+- Pipe-delimited protocol: VBA has no built-in JSON parser. Rather than
+  bundling a JSON library, the server returns simple pipe-delimited text
+  with URL-encoding. Robust and easy to debug.
+
+- Context files: dropping .txt files next to the form is the simplest
+  possible UX for feeding the LLM reference data. No database, no config
+  file, no upload step.
+
+- Graceful fallback: if the LLM is unavailable or returns bad output,
+  the server falls back to demo mode so the system never crashes.
+
+
+Setup
+=====
 
 1. Install Python dependencies
 -------------------------------
@@ -59,10 +220,12 @@ the information inside to fill name, address, date, etc.
 
 6. Fix text by comments
 ------------------------
-Add a Word comment on any text starting with one of:
-    FIX:   make this more formal
-    INSTR: translate to Spanish
-    EDIT:  shorten to one sentence
+Just add a normal Word comment on any text. Write what you want changed:
 
-After the macro fills the form, it scans for these comments and sends
-each one to the LLM for revision. Changes appear as tracked changes.
+    "make this more formal"
+    "translate to Spanish"
+    "shorten to one sentence"
+
+After the macro fills the form, it scans all comments. Any comment that
+isn't AI-generated (Reason: / Applied fix.) is treated as an instruction
+and sent to the LLM. The revised text appears as a tracked change.
