@@ -1,0 +1,132 @@
+MRM ODD Autofill Demo - Screen Recording Script
+=================================================
+
+Total duration target: ~90 seconds
+
+
+SCENE 1 — THE PROBLEM  (0:00 - 0:15)
+--------------------------------------
+
+[Screen: Word document open, showing the empty ODD form.
+         Scroll slowly through the form so all empty fields are visible.]
+
+ON-SCREEN TEXT (caption):
+  "MRM analysts spend hours manually filling Object Development Documents."
+
+NARRATION:
+  "This is a typical ODD — an Object Development Document for Model Risk
+  Management. Every field is empty. Filling this manually means switching
+  between the form and multiple source documents, copying values one by one."
+
+
+SCENE 2 — THE CONTEXT FILE  (0:15 - 0:25)
+-------------------------------------------
+
+[Screen: Open File Explorer, show model_info.txt next to the .docm file
+         in the same folder. Briefly open model_info.txt in Notepad.]
+
+ON-SCREEN TEXT (caption):
+  "Reference data sits in a simple text file — right next to the form."
+
+NARRATION:
+  "All the model information lives in a plain text file in the same folder.
+  No special setup needed — just drop the file next to the document."
+
+
+SCENE 3 — ONE CLICK  (0:25 - 0:35)
+------------------------------------
+
+[Screen: Back in Word. Click the "Fill Form" button on the Quick Access
+         Toolbar (or run Alt+F8 → FillForm_Tracked_ByPython).]
+
+ON-SCREEN TEXT (caption):
+  "One click: the macro detects all form fields and sends them to the AI."
+
+NARRATION:
+  "One click. The macro scans the document, detects every field type —
+  content controls, placeholders, blanks, checkboxes — packages them
+  with the document context, and sends everything to the AI server."
+
+
+SCENE 4 — FIELDS FILLED  (0:35 - 0:55)
+-----------------------------------------
+
+[Screen: Form is now filled. Scroll through slowly.
+         Show: "CCAR Loss Forecasting Model" in Model Name,
+               "MRM-2025-0042" in Model ID,
+               "Tier 1 - Critical" selected in dropdown,
+               placeholders replaced in Section 2,
+               underscore blanks filled in Section 3,
+               checkboxes checked in Section 4.
+         Show Track Changes marks (red underlines/strikethroughs).
+         Hover over a "Reason:" comment to show the AI's explanation.]
+
+ON-SCREEN TEXT (caption):
+  "Every field filled. Every change tracked. Every value explained."
+
+NARRATION:
+  "Every field is filled with the correct value from the reference file.
+  All changes are tracked — nothing is silently overwritten.
+  And each field has a comment explaining why that value was chosen.
+  The analyst can accept or reject any individual change."
+
+
+SCENE 5 — ADD A COMMENT TO FIX TEXT  (0:55 - 1:05)
+----------------------------------------------------
+
+[Screen: Scroll to Section 5 "Executive Summary".
+         Highlight the paragraph (which has grammar errors).
+         Right-click → New Comment.
+         Type: "fix grammar and make more professional"
+         Click the Fill Form button again (or Alt+F8).]
+
+ON-SCREEN TEXT (caption):
+  "Need a fix? Just leave a comment and click the button again."
+
+NARRATION:
+  "The executive summary has some grammar issues. The analyst simply
+  highlights the text, adds a comment with the instruction — 'fix
+  grammar and make more professional' — and clicks the button again."
+
+
+SCENE 6 — TEXT FIXED  (1:05 - 1:25)
+-------------------------------------
+
+[Screen: Show the revised paragraph — grammar corrected, more formal tone.
+         Show the tracked change (old text struck through, new text inserted).
+         Show the new comment: "Applied fix. Reason: ...".]
+
+ON-SCREEN TEXT (caption):
+  "Text revised as a tracked change — fully auditable."
+
+NARRATION:
+  "The AI rewrites the paragraph as a tracked change. The original text
+  is preserved in the revision history. The analyst reviews, accepts, done.
+  Full audit trail from start to finish."
+
+
+SCENE 7 — CLOSING  (1:25 - 1:30)
+----------------------------------
+
+[Screen: Final view of the completed document with Track Changes visible.]
+
+ON-SCREEN TEXT (caption):
+  "Forminator — AI form filling for Word.
+  Detect fields. Load context. Fill. Fix. All tracked."
+
+NARRATION (optional):
+  "Forminator: detect the fields, load the context, fill the form, fix
+  the text — all in tracked changes. Minutes of manual work, done in seconds."
+
+
+===================================================================
+NOTES FOR RECORDING
+===================================================================
+
+- Use a clean Word window, zoom ~130% so fields are clearly readable
+- Turn on Track Changes before recording (the macro does this too)
+- Use the Review pane or hover over comments to show AI explanations
+- Keep mouse movements slow and deliberate for clarity
+- If using demo mode (no LLM key), the fills will be placeholder values —
+  for a realistic recording, set LLM_API_KEY to get real AI fills
+- The Python server must be running: uvicorn python_form_filler:app --port 8000

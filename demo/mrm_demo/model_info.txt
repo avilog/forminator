@@ -1,0 +1,46 @@
+Model Information
+=================
+
+Model Name:       CCAR Loss Forecasting Model
+Model ID:         MRM-2025-0042
+Model Tier:       Tier 1 - Critical
+Version:          3.2
+
+Ownership
+---------
+Model Owner:      Jennifer Walsh, Managing Director, Market Risk
+Lead Developer:   Raj Patel, VP, Quantitative Analytics
+Development Date: 2025-09-15
+
+Purpose
+-------
+CCAR/DFAST regulatory stress testing for market risk loss forecasting.
+Used to estimate potential trading book losses under Fed-prescribed
+macroeconomic scenarios (severely adverse, adverse, baseline).
+
+Methodology
+-----------
+Monte Carlo simulation with 10,000 paths.
+Applies historically-calibrated stress factors to current portfolio positions.
+Key risk factors: interest rates, credit spreads, equity indices, FX rates.
+Number of risk factors: 47
+
+Data
+----
+Primary data source: Global Risk Data Warehouse (GRDW)
+Observation period:  Q1 2005 - Q4 2024 (20 years)
+Data frequency:      Daily
+Key variables:       P&L attribution, VaR breaks, position-level Greeks
+
+Classification
+--------------
+Model Use:    Regulatory reporting, Internal risk management
+Risk Rating:  High
+Regulatory:   Fed CCAR/DFAST submission
+
+Validation History
+------------------
+Last validated:       2025-03-10 (Annual review)
+Validation outcome:   Satisfactory with findings
+Open findings:        2 (targeted remediation by Q4 2025)
+Back-testing result:  3 exceptions in 250 days (within green zone)
