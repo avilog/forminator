@@ -40,7 +40,7 @@ Public Sub FillForm_Tracked_ByPython()
     Dim auditSummary As String
     If Not ParseAuditResponse(auditResp, auditSummary) Then
         MsgBox "Audit failed. Fix extraction or template before filling." & vbCrLf & vbCrLf & auditSummary, vbExclamation, "Form filler"
-        GoTo CleanExit
+        GoTo FixStage
     End If
 
     If Len(auditSummary) > 0 Then
@@ -54,6 +54,7 @@ Public Sub FillForm_Tracked_ByPython()
     ApplyFillPlan doc, fillResp, APPLY_REASONS_COMMENTS
 
     ' 5) fix stage from instruction comments
+FixStage:
     If FIX_FROM_COMMENTS Then
         FixTextByInstructionComments doc
     End If
