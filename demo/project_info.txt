@@ -1,0 +1,35 @@
+Project: Atlas Migration
+========================
+
+Project Code:     PRJ-2025-ATLAS
+Status:           In Progress
+Priority:         High
+Start Date:       2025-01-10
+Target Completion: 2025-06-30
+
+Description
+-----------
+Migration of legacy billing system (Oracle-based) to cloud-native
+microservices architecture on AWS. Includes data migration, API
+redesign, and frontend rebuild in React.
+
+Team Members
+------------
+- Sarah Johnson (Lead Engineer)
+- Alex Kim (Backend Developer)
+- Priya Patel (Frontend Developer)
+- Tom Williams (QA Engineer)
+- David Chen (Project Sponsor)
+
+Budget
+------
+Approved Budget:  $380,000
+Spent to Date:    $142,500
+Remaining:        $237,500
+
+Milestones
+----------
+[X] Phase 1: Requirements & Design (Jan–Feb 2025)
+[ ] Phase 2: Core API Development (Mar–Apr 2025)
+[ ] Phase 3: Data Migration (May 2025)
+[ ] Phase 4: Testing & Launch (Jun 2025)
