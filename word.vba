@@ -100,14 +100,36 @@ Private Function CollectContentControlsJson(ByVal doc As Document) As String
         first = False
 
         Dim ctx As String
-        ctx = GetContextAroundRange(cc.Range, 80, doc)
+        ctx = GetContextAroundRange(cc.Range, 200, doc)
+
+        ' Current text / placeholder text
+        Dim curText As String
+        curText = ""
+        On Error Resume Next
+        curText = cc.Range.Text
+        On Error GoTo 0
+        If cc.ShowingPlaceholderText Then curText = "[placeholder] " & curText
+
+        ' Dropdown / combobox options
+        Dim opts As String: opts = ""
+        If cc.Type = wdContentControlDropdownList Or cc.Type = wdContentControlComboBox Then
+            Dim de As ContentControlListEntry
+            Dim optFirst As Boolean: optFirst = True
+            For Each de In cc.DropdownListEntries
+                If Not optFirst Then opts = opts & ", "
+                optFirst = False
+                opts = opts & de.Text
+            Next de
+        End If
 
         parts = parts & "{"
         parts = parts & """id"":" & CStr(cc.ID) & ","
         parts = parts & """tag"":""" & JsonEsc(cc.Tag) & ""","
         parts = parts & """title"":""" & JsonEsc(cc.Title) & ""","
         parts = parts & """cc_type"":""" & JsonEsc(ContentControlTypeName(cc.Type)) & ""","
-        parts = parts & """context"":""" & JsonEsc(Clip(ctx, 400)) & """"
+        parts = parts & """current_text"":""" & JsonEsc(Clip(curText, 200)) & ""","
+        parts = parts & """options"":""" & JsonEsc(Clip(opts, 500)) & ""","
+        parts = parts & """context"":""" & JsonEsc(Clip(ctx, 600)) & """"
         parts = parts & "}"
     Next cc
 
@@ -138,7 +160,7 @@ Private Function CollectPlaceholdersJson(ByVal doc As Document) As String
 
         Dim token As String: token = r.Text
         Dim key As String: key = ExtractPlaceholderKey(token)
-        Dim ctx As String: ctx = GetContextAroundRange(r, 80, doc)
+        Dim ctx As String: ctx = GetContextAroundRange(r, 200, doc)
 
         If Not first Then parts = parts & ","
         first = False
@@ -147,7 +169,7 @@ Private Function CollectPlaceholdersJson(ByVal doc As Document) As String
         parts = parts & """token"":""" & JsonEsc(token) & ""","
         parts = parts & """key"":""" & JsonEsc(key) & ""","
         parts = parts & """occurrence"":" & CStr(occ) & ","
-        parts = parts & """context"":""" & JsonEsc(Clip(ctx, 400)) & """"
+        parts = parts & """context"":""" & JsonEsc(Clip(ctx, 600)) & """"
         parts = parts & "}"
 
         r.Collapse wdCollapseEnd
@@ -198,9 +220,9 @@ Private Function CollectUnderscoreRunsJson(ByVal doc As Document) As String
                 Dim grp As Range
                 Set grp = doc.Range(Start:=groupStart, End:=groupEnd)
                 Dim ctx As String
-                ctx = GetContextAroundRange(grp, 80, doc)
+                ctx = GetContextAroundRange(grp, 200, doc)
 
-                parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctx, 400)) & """}"
+                parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctx, 600)) & """}"
 
                 groupStart = scan.Start
                 groupEnd = scan.End
@@ -218,9 +240,9 @@ Private Function CollectUnderscoreRunsJson(ByVal doc As Document) As String
         Dim grpLast As Range
         Set grpLast = doc.Range(Start:=groupStart, End:=groupEnd)
         Dim ctxLast As String
-        ctxLast = GetContextAroundRange(grpLast, 80, doc)
+        ctxLast = GetContextAroundRange(grpLast, 200, doc)
 
-        parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctxLast, 400)) & """}"
+        parts = parts & "{""occurrence"":" & CStr(occ) & ",""context"":""" & JsonEsc(Clip(ctxLast, 600)) & """}"
     End If
 
     parts = parts & "]"
@@ -281,12 +303,12 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
                 first = False
 
                 Dim ctx As String
-                ctx = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 80, doc)
+                ctx = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 200, doc)
 
                 parts = parts & "{""occurrence"":" & CStr(groupOcc) & _
                                 ",""text"":""" & JsonEsc(Clip(curParaText, 800)) & """" & _
                                 ",""boxes"":" & boxesJson & _
-                                ",""context"":""" & JsonEsc(Clip(ctx, 400)) & """}"
+                                ",""context"":""" & JsonEsc(Clip(ctx, 600)) & """}"
             End If
 
             curParaStart = pStart
@@ -302,7 +324,24 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
         Dim off As Long
         off = scan.Start - curParaStart
 
-        boxesJson = boxesJson & "{""index"":" & CStr(boxCount) & ",""offset"":" & CStr(off) & ",""label"":""""}"
+        ' Extract label: text from end of "[ ]" to next "[ ]" or end of paragraph
+        Dim lblStart As Long: lblStart = scan.End
+        Dim lblEnd As Long: lblEnd = pEnd - 1   ' exclude paragraph mark
+        Dim lblRange As Range
+        Set lblRange = doc.Range(lblStart, lblEnd)
+        Dim lblText As String: lblText = ""
+        ' Look for next "[ ]" in remaining para text to trim label
+        Dim nextBox As Long
+        nextBox = InStr(lblRange.Text, "[ ]")
+        If nextBox > 0 Then
+            lblText = Trim$(Left$(lblRange.Text, nextBox - 1))
+        Else
+            lblText = Trim$(lblRange.Text)
+        End If
+        ' Clean up common separators
+        If Right$(lblText, 1) = "," Or Right$(lblText, 1) = ";" Then lblText = Trim$(Left$(lblText, Len(lblText) - 1))
+
+        boxesJson = boxesJson & "{""index"":" & CStr(boxCount) & ",""offset"":" & CStr(off) & ",""label"":""" & JsonEsc(Clip(lblText, 100)) & """}"
 
         scan.Collapse wdCollapseEnd
     Loop
@@ -315,12 +354,12 @@ Private Function CollectCheckboxGroupsJson(ByVal doc As Document) As String
         first = False
 
         Dim ctxLast As String
-        ctxLast = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 80, doc)
+        ctxLast = GetContextAroundRange(doc.Range(curParaStart, curParaEnd), 200, doc)
 
         parts = parts & "{""occurrence"":" & CStr(groupOcc) & _
                         ",""text"":""" & JsonEsc(Clip(curParaText, 800)) & """" & _
                         ",""boxes"":" & boxesJson & _
-                        ",""context"":""" & JsonEsc(Clip(ctxLast, 400)) & """}"
+                        ",""context"":""" & JsonEsc(Clip(ctxLast, 600)) & """}"
     End If
 
     parts = parts & "]"
@@ -864,6 +903,7 @@ Private Function ContentControlTypeName(ByVal t As Long) As String
         Case wdContentControlDate: ContentControlTypeName = "date"
         Case wdContentControlDropdownList: ContentControlTypeName = "dropdown"
         Case wdContentControlComboBox: ContentControlTypeName = "combobox"
+        Case 8: ContentControlTypeName = "checkbox"  ' wdContentControlCheckBox (Word 2010+)
         Case Else: ContentControlTypeName = "other"
     End Select
 End Function

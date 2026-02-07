@@ -1,0 +1,43 @@
+Employee Information
+====================
+
+Full Name:        Sarah Johnson
+Employee ID:      EMP-2024-0847
+Department:       Engineering
+Position:         Senior Software Engineer
+Start Date:       2023-03-15
+Office Location:  Building C, Floor 3, Desk 312
+
+Manager:          David Chen
+Manager Email:    david.chen@acmecorp.com
+
+Contact
+-------
+Work Email:       sarah.johnson@acmecorp.com
+Phone:            +1 (555) 234-8901
+Emergency Contact: Michael Johnson (spouse) – +1 (555) 234-8902
+
+Address
+-------
+123 Oak Avenue, Apt 4B
+Springfield, IL 62704
+United States
+
+Compensation
+------------
+Annual Salary:    $142,000
+Pay Frequency:    Bi-weekly
+Benefits Plan:    Premium Health + Dental + Vision
+
+Equipment
+---------
+Laptop:           MacBook Pro 16" (Asset #LPT-3391)
+Monitor:          Dell U2723QE (Asset #MON-7842)
+Phone:            iPhone 15 Pro (Asset #PHN-1205)
+
+Notes
+-----
+Completed security clearance: Level 2 (2023-06-01)
+Completed mandatory training: Safety, Ethics, Data Privacy (2023-04)
+Performance review 2024: Exceeds Expectations
+Eligible for promotion review: Q2 2025
