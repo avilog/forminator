@@ -72,6 +72,32 @@ CleanFail:
     MsgBox "Fill failed: " & Err.Description, vbExclamation, "Form filler"
 End Sub
 
+' =======================
+' ENTRY POINT: FIX-ONLY
+' =======================
+' Standalone entry point so users can run ONLY the fix stage
+' (FIX: / INSTR: / EDIT: comments) without a full fill pass.
+' Assign to a Quick Access button or run via Alt+F8.
+Public Sub FixByComments()
+    Dim doc As Document
+    Set doc = ActiveDocument
+
+    Dim prevTrack As Boolean
+    prevTrack = doc.TrackRevisions
+    doc.TrackRevisions = True
+
+    On Error GoTo FixOnlyFail
+
+    FixTextByInstructionComments doc
+
+    doc.TrackRevisions = prevTrack
+    Exit Sub
+
+FixOnlyFail:
+    doc.TrackRevisions = prevTrack
+    MsgBox "Fix-by-comments failed: " & Err.Description, vbExclamation, "Form filler"
+End Sub
+
 ' ==========================================================
 ' BUILD PAYLOAD
 ' ==========================================================
@@ -920,11 +946,45 @@ End Function
 
 Private Function GetContextAroundRange(ByVal r As Range, ByVal charsEachSide As Long, ByVal doc As Document) As String
     Dim s As Long, e As Long
+    Dim docEnd As Long: docEnd = doc.Content.End
+
     s = r.Start - charsEachSide
     If s < 0 Then s = 0
 
     e = r.End + charsEachSide
-    If e > doc.Content.End Then e = doc.Content.End
+    If e > docEnd Then e = docEnd
+
+    ' ── snap start forward to first space so we don't clip a word ──
+    If s > 0 Then
+        Dim probe As Range
+        Set probe = doc.Range(Start:=s, End:=s + 1)
+        ' walk forward until we hit a space (max 30 chars to avoid runaway)
+        Dim guard As Long: guard = 0
+        Do While s < r.Start And guard < 30
+            Set probe = doc.Range(Start:=s, End:=s + 1)
+            If probe.Text = " " Or probe.Text = vbCr Or probe.Text = vbLf Then
+                s = s + 1   ' skip the space itself
+                Exit Do
+            End If
+            s = s + 1
+            guard = guard + 1
+        Loop
+    End If
+
+    ' ── snap end backward to last space so we don't clip a word ──
+    If e < docEnd Then
+        Dim guard2 As Long: guard2 = 0
+        Do While e > r.End And guard2 < 30
+            Dim ch As Range
+            Set ch = doc.Range(Start:=e - 1, End:=e)
+            If ch.Text = " " Or ch.Text = vbCr Or ch.Text = vbLf Then
+                e = e - 1   ' exclude the trailing space
+                Exit Do
+            End If
+            e = e - 1
+            guard2 = guard2 + 1
+        Loop
+    End If
 
     Dim ctx As Range
     Set ctx = doc.Range(Start:=s, End:=e)

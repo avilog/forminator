@@ -6,6 +6,7 @@
 #   LLM_MODEL     – model to use    (default: gpt-4o)
 
 import os
+import re
 import json
 import logging
 from typing import List
@@ -93,6 +94,57 @@ class ReviseRequest(BaseModel):
 # ── Helpers ─────────────────────────────────────────────
 def enc(s: str) -> str:
     return quote(s or "", safe="")
+
+
+# Characters invisible in Word documents but present in the extracted text:
+# control chars, BOM, soft-hyphens, zero-width joiners, object-replacement, etc.
+_INVISIBLE_RE = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f"        # C0 control chars (keep \t \n \r)
+    r"\xad"                                       # soft-hyphen
+    r"\u200b-\u200f"                              # zero-width / direction marks
+    r"\u2028\u2029"                               # line/paragraph separators
+    r"\u202a-\u202e"                              # bidi embedding marks
+    r"\u2060-\u2064"                              # word-joiner, invisible chars
+    r"\ufeff"                                     # BOM / zero-width no-break space
+    r"\ufffc\ufffd"                               # object replacement / replacement char
+    r"\u0001-\u0003"                              # Word field markers
+    r"]"
+)
+
+
+def clean_context(text: str, max_chars: int = 0) -> str:
+    """Sanitise a context string before it reaches the LLM.
+
+    1. Strip characters that are invisible in the Word document but leak
+       into the extracted range (field markers, BOM, direction marks …).
+    2. Collapse runs of whitespace into single spaces.
+    3. If *max_chars* > 0, trim to that length but snap outward to the
+       nearest word boundary so the LLM never sees a clipped word.
+    """
+    # Remove invisible characters
+    t = _INVISIBLE_RE.sub("", text)
+    # Normalise all whitespace (tabs, stray newlines inside context) to spaces
+    t = re.sub(r"\s+", " ", t).strip()
+
+    if max_chars > 0 and len(t) > max_chars:
+        # Trim from each end equally, snapping to word boundaries
+        half = max_chars // 2
+
+        # ── left side: keep from start, cut at last space before half ──
+        left = t[:half]
+        sp = left.rfind(" ")
+        if sp > 0:
+            left = left[:sp]
+
+        # ── right side: keep to end, cut at first space after len-half ──
+        right = t[len(t) - half:]
+        sp = right.find(" ")
+        if sp != -1 and sp < len(right) - 1:
+            right = right[sp + 1:]
+
+        t = left + " … " + right
+
+    return t
 
 
 # ── LLM caller ─────────────────────────────────────────
@@ -215,7 +267,7 @@ def _build_fill_user(req: FillRequest, doc_text: str, ctx_files: str) -> str:
             if cc.options:
                 lines.append(f"  Options (pick one): {cc.options[:400]}")
             if cc.context:
-                lines.append(f"  Surrounding text: ...{cc.context[:400]}...")
+                lines.append(f"  Surrounding text: {clean_context(cc.context, 400)}")
         sections.append("\n".join(lines))
 
     if req.placeholders:
@@ -223,7 +275,7 @@ def _build_fill_user(req: FillRequest, doc_text: str, ctx_files: str) -> str:
         for p in req.placeholders:
             lines.append(f'- Token="{p.token}"  key="{p.key}"')
             if p.context:
-                lines.append(f"  Surrounding text: ...{p.context[:400]}...")
+                lines.append(f"  Surrounding text: {clean_context(p.context, 400)}")
         sections.append("\n".join(lines))
 
     if req.underscore_runs:
@@ -231,7 +283,7 @@ def _build_fill_user(req: FillRequest, doc_text: str, ctx_files: str) -> str:
         for u in req.underscore_runs:
             lines.append(f"- Blank #{u.occurrence}")
             if u.context:
-                lines.append(f"  Surrounding text: ...{u.context[:400]}...")
+                lines.append(f"  Surrounding text: {clean_context(u.context, 400)}")
         sections.append("\n".join(lines))
 
     if req.checkbox_groups:
@@ -245,9 +297,9 @@ def _build_fill_user(req: FillRequest, doc_text: str, ctx_files: str) -> str:
                 f'- Group {g.occurrence}:  boxes=[{box_labels}]'
             )
             if g.text:
-                lines.append(f"  Paragraph text: {g.text[:300]}")
+                lines.append(f"  Paragraph text: {clean_context(g.text, 300)}")
             if g.context:
-                lines.append(f"  Surrounding text: ...{g.context[:400]}...")
+                lines.append(f"  Surrounding text: {clean_context(g.context, 400)}")
         sections.append("\n".join(lines))
 
     return "\n\n".join(sections)
@@ -329,7 +381,7 @@ Respond with ONLY valid JSON — no markdown fences, no extra text:
 def _build_revise_user(
     instruction: str, selected_text: str, ctx_files: str = ""
 ) -> str:
-    parts = [f"Instruction: {instruction}\n\nOriginal text:\n{selected_text}"]
+    parts = [f"Instruction: {instruction}\n\nOriginal text:\n{clean_context(selected_text)}"]
     if ctx_files:
         parts.append(f"\nReference files (for context):\n{ctx_files[:5000]}")
     return "\n".join(parts)
