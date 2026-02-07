@@ -741,6 +741,20 @@ Public Sub FixTextByInstructionComments(ByVal doc As Document)
             Dim target As Range
             Set target = doc.Range(scopeStarts(j), scopeEnds(j))
 
+            ' Trim trailing paragraph marks and cell markers that Word
+            ' refuses to delete (causes "the range cannot be deleted").
+            Do While target.End > target.Start
+                Dim lastCh As Range
+                Set lastCh = doc.Range(target.End - 1, target.End)
+                If lastCh.Text = vbCr Or lastCh.Text = Chr$(7) Then
+                    target.End = target.End - 1
+                Else
+                    Exit Do
+                End If
+            Loop
+
+            If target.End = target.Start Then GoTo NextComment
+
             Dim startPos As Long
             startPos = target.Start
 
@@ -750,6 +764,7 @@ Public Sub FixTextByInstructionComments(ByVal doc As Document)
             Set applied = doc.Range(startPos, startPos + Len(revised))
             AddCommentSafe doc, applied, "Applied fix. " & Clip(reason, 220)
         End If
+NextComment:
     Next j
 
 CleanExit:
@@ -877,7 +892,18 @@ End Function
 ' ==========================================================
 Private Sub AddCommentSafe(ByVal doc As Document, ByVal r As Range, ByVal text As String)
     On Error Resume Next
+
+    ' Temporarily set author to Forminator Bot
+    Dim savedName As String: savedName = Application.UserName
+    Dim savedInit As String: savedInit = Application.UserInitials
+    Application.UserName = "Forminator Bot"
+    Application.UserInitials = "FB"
+
     doc.Comments.Add Range:=r, text:=text
+
+    Application.UserName = savedName
+    Application.UserInitials = savedInit
+
     On Error GoTo 0
 End Sub
 
